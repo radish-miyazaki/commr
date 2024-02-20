@@ -1,3 +1,4 @@
+use std::cmp::Ordering::{Equal, Greater, Less};
 use std::fs::File;
 use std::io;
 use std::io::{BufRead, BufReader};
@@ -41,24 +42,52 @@ fn open(filename: &str) -> MyResult<Box<dyn BufRead>> {
     }
 }
 
-enum Columns {
-    Column1(String),
-    Column2(String),
-    Column3(String),
+enum Column<'a> {
+    Col1(&'a str),
+    Col2(&'a str),
+    Col3(&'a str),
 }
 
-fn _print_stdout(column: Columns, delimiter: &str) {
+fn print_row(column: Column, cli: &Cli) {
+    let mut vec = vec![];
+
     match column {
-        Columns::Column1(s) => {
-            println!("{}", s);
+        Column::Col1(s) => {
+            if !cli.show_col1 {
+                return;
+            }
+
+            vec.push(s);
         }
-        Columns::Column2(s) => {
-            println!("{}{}", delimiter, s);
+        Column::Col2(s) => {
+            if !cli.show_col2 {
+                return;
+            }
+
+            if cli.show_col1 {
+                vec.push(&cli.delimiter);
+            }
+
+            vec.push(s);
         }
-        Columns::Column3(s) => {
-            println!("{}{}{}", delimiter, delimiter, s);
+        Column::Col3(s) => {
+            if !cli.show_col3 {
+                return;
+            }
+
+            if cli.show_col1 {
+                vec.push(&cli.delimiter);
+            }
+            if cli.show_col2 {
+                vec.push(&cli.delimiter);
+            }
+            
+            vec.push(s);
         }
     }
+
+    vec.iter().for_each(|s| print!("{}", s));
+    println!();
 }
 
 pub fn run(cli: Cli) -> MyResult<()> {
@@ -72,69 +101,50 @@ pub fn run(cli: Cli) -> MyResult<()> {
     let file1 = open(filename1)?;
     let file2 = open(filename2)?;
 
-    let mut file1_lines = file1.lines();
-    let mut file2_lines = file2.lines();
+    let to_insensitive_line = |line: String| {
+        if cli.insensitive {
+            line.to_lowercase()
+        } else {
+            line
+        }
+    };
+    let mut lines1
+        = file1.lines().filter_map(Result::ok).map(to_insensitive_line);
+    let mut lines2
+        = file2.lines().filter_map(Result::ok).map(to_insensitive_line);
 
-    let mut line1 = file1_lines.next();
-    let mut line2 = file2_lines.next();
+    let mut line1 = lines1.next();
+    let mut line2 = lines2.next();
     loop {
         match (&line1, &line2) {
-            (Some(Ok(l1)), Some(Ok(l2))) => {
-                let mut l1 = l1.to_string();
-                let mut l2 = l2.to_string();
-
-                if cli.insensitive {
-                    l1 = l1.to_lowercase();
-                    l2 = l2.to_lowercase();
-                }
-
-                if l1 == l2 {
-                    if cli.show_col3 {
-                        if cli.show_col1 && cli.show_col2 {
-                            println!("{}{}{}", cli.delimiter, cli.delimiter, l1);
-                        } else if cli.show_col1 {
-                            println!("{}{}", cli.delimiter, l1);
-                        } else if cli.show_col2 {
-                            println!("{}{}", cli.delimiter, l1);
-                        } else {
-                            println!("{}", l1);
-                        }
+            (Some(val1), Some(val2)) => {
+                match val1.cmp(&val2) {
+                    Less => {
+                        print_row(Column::Col1(&val1), &cli);
+                        line1 = lines1.next();
                     }
-                    line1 = file1_lines.next();
-                    line2 = file2_lines.next();
-                } else if l1 < l2 {
-                    if cli.show_col1 {
-                        println!("{}", l1);
+                    Greater => {
+                        print_row(Column::Col2(&val2), &cli);
+                        line2 = lines2.next();
                     }
-                    line1 = file1_lines.next();
-                } else {
-                    if cli.show_col2 {
-                        if cli.show_col1 {
-                            println!("{}{}", cli.delimiter, l2);
-                        } else {
-                            println!("{}", l2);
-                        }
+                    Equal => {
+                        print_row(Column::Col3(&val1), &cli);
+                        line1 = lines1.next();
+                        line2 = lines2.next();
                     }
-                    line2 = file2_lines.next();
                 }
             }
-            (Some(Ok(l)), None) => {
-                if cli.show_col1 {
-                    println!("{}", l);
-                }
-                line1 = file1_lines.next();
-                line2 = file2_lines.next();
+            (Some(val), None) => {
+                print_row(Column::Col1(&val), &cli);
+
+                line1 = lines1.next();
+                line2 = lines2.next();
             }
-            (None, Some(Ok(ref l))) => {
-                if cli.show_col2 {
-                    if cli.show_col1 {
-                        println!("{}{}", cli.delimiter, l);
-                    } else {
-                        println!("{}", l);
-                    }
-                }
-                line1 = file1_lines.next();
-                line2 = file2_lines.next();
+            (None, Some(val)) => {
+                print_row(Column::Col2(&val), &cli);
+
+                line1 = lines1.next();
+                line2 = lines2.next();
             }
             _ => break,
         }
