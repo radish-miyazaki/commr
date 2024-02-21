@@ -5,6 +5,8 @@ use std::io::{BufRead, BufReader};
 
 use clap::{ArgAction, Parser};
 
+use crate::Column::{Col1, Col2, Col3};
+
 pub type MyResult<T> = Result<T, Box<dyn std::error::Error>>;
 
 #[derive(Debug, Parser)]
@@ -52,14 +54,14 @@ fn print_row(column: Column, cli: &Cli) {
     let mut vec = vec![];
 
     match column {
-        Column::Col1(s) => {
+        Col1(s) => {
             if !cli.show_col1 {
                 return;
             }
 
             vec.push(s);
         }
-        Column::Col2(s) => {
+        Col2(s) => {
             if !cli.show_col2 {
                 return;
             }
@@ -70,7 +72,7 @@ fn print_row(column: Column, cli: &Cli) {
 
             vec.push(s);
         }
-        Column::Col3(s) => {
+        Col3(s) => {
             if !cli.show_col3 {
                 return;
             }
@@ -81,7 +83,7 @@ fn print_row(column: Column, cli: &Cli) {
             if cli.show_col2 {
                 vec.push(&cli.delimiter);
             }
-            
+
             vec.push(s);
         }
     }
